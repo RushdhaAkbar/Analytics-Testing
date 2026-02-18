@@ -23,7 +23,7 @@ const QC = {
   "Q1 2026": { s: new Date("2026-01-01"), e: new Date("2026-03-31"), d: 90 },
 };
 
-const pct = (a, b) => (b === 0 ? 0 : (a / b) * 100);
+const p  = (a, b) => (b === 0 ? 0 : (a / b) * 100);
 const f  = n => n.toFixed(1) + "%";
 const fd = ds => new Date(ds).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
 
