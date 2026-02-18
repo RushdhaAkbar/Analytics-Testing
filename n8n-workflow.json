@@ -1,0 +1,202 @@
+{
+  "name": "Marketing Dashboard — Sheets to Gist",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 15 }]
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1RBdOWkQlD8NR_2lZtixv1XJONJ4s5pguTiVAzduo1So",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Import",
+          "mode": "name"
+        },
+        "options": {
+          "valueRenderMode": "UNFORMATTED_VALUE",
+          "dateTimeRenderOption": "FORMATTED_STRING"
+        }
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Panels Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [440, 160],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1f-rgY11LGkEWOR_LONkyDIe-jigV_815EMI4bE5jJz4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Import",
+          "mode": "name"
+        },
+        "options": {
+          "valueRenderMode": "UNFORMATTED_VALUE",
+          "dateTimeRenderOption": "FORMATTED_STRING"
+        }
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "VET-I Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [440, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "17VOyPvRV9EN1becgn4a7jtkfbv9Y-tjrYyI5iMTy500",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Import",
+          "mode": "name"
+        },
+        "options": {
+          "valueRenderMode": "UNFORMATTED_VALUE",
+          "dateTimeRenderOption": "FORMATTED_STRING"
+        }
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "BOA-I Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [440, 440],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tag each item with its source so the transform knows which product to assign\nconst allItems = $input.all();\nconst tagged = [];\n\nfor (const item of allItems) {\n  // n8n passes items from all branches — we need to know which node they came from\n  // The pairedItem tells us the source input index (0=Panels, 1=VET-I, 2=BOA-I)\n  const inputIndex = item.pairedItem?.input ?? 0;\n  const source = inputIndex === 1 ? 'veti' : inputIndex === 2 ? 'boai' : 'panels';\n  tagged.push({ json: { ...item.json, __source: source } });\n}\n\nreturn tagged;"
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000005",
+      "name": "Tag Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─── Helpers ──────────────────────────────────────────────────────\nfunction assignQuarter(date) {\n  const m = date.getMonth() + 1;\n  const y = date.getFullYear();\n  if (y === 2025 && m >= 10) return 'Q4 2025';\n  if (y === 2026 && m >= 1  && m <= 3)  return 'Q1 2026';\n  if (y === 2026 && m >= 4  && m <= 6)  return 'Q2 2026';\n  if (y === 2026 && m >= 7  && m <= 9)  return 'Q3 2026';\n  if (y === 2026 && m >= 10) return 'Q4 2026';\n  return 'Q' + Math.ceil(m / 3) + ' ' + y;\n}\n\nfunction normalizeDate(date) {\n  const y = date.getFullYear();\n  const m = date.getMonth() + 1;\n  // Dates entered in 2025 Jan-Mar were meant to be 2026\n  if (y === 2025 && m >= 1 && m <= 3) return new Date(2026, date.getMonth(), date.getDate());\n  // Typo year 2926\n  if (y === 2926) return new Date(2026, date.getMonth(), date.getDate());\n  return date;\n}\n\nfunction toInt(val) {\n  if (val === null || val === undefined || val === '') return 0;\n  const n = parseInt(String(val).replace(/,/g, '').trim(), 10);\n  return isNaN(n) ? 0 : n;\n}\n\nfunction toDateStr(d) {\n  return d.getFullYear() + '-' +\n    String(d.getMonth() + 1).padStart(2, '0') + '-' +\n    String(d.getDate()).padStart(2, '0');\n}\n\nfunction parseDate(raw) {\n  if (!raw && raw !== 0) return null;\n  // Google Sheets serial number (number of days since Dec 30 1899)\n  if (typeof raw === 'number') {\n    return new Date(Math.round((raw - 25569) * 86400 * 1000));\n  }\n  const s = String(raw).trim();\n  if (!s) return null;\n  // Try standard parse\n  const d = new Date(s);\n  if (!isNaN(d.getTime())) return d;\n  // Try \"DD Mon YYYY\" format e.g. \"15 Oct 2025\"\n  const m = s.match(/^(\\d{1,2})\\s+([A-Za-z]+)\\s+(\\d{4})$/);\n  if (m) {\n    const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};\n    const mo = months[m[2].toLowerCase().slice(0,3)];\n    if (mo !== undefined) return new Date(parseInt(m[3]), mo, parseInt(m[1]));\n  }\n  return null;\n}\n\n// ─── Skip logic (mirrors dashboard parseCSV) ──────────────────────\nconst SKIP = new Set([\n  'Date of the Event','Q4 2025','Q1 2026','Q2 2026','Q3 2026','Q4 2026',\n  'TD','BOA','VET','LAW','BOA-I','VET-I'\n]);\nconst PANEL_PRODUCTS = new Set(['TD','BOA','VET','LAW']);\n\n// ─── Process all rows ─────────────────────────────────────────────\nconst events = [];\n\nfor (const item of $input.all()) {\n  const row = item.json;\n  const source = row.__source || 'panels';\n\n  // Google Sheets node returns rows as objects keyed by column header.\n  // We need positional values, so we grab them in order.\n  // Filter out our injected __source key.\n  const vals = Object.entries(row)\n    .filter(([k]) => k !== '__source')\n    .map(([, v]) => v);\n\n  if (!vals || vals.length < 8) continue;\n\n  // Skip header/total/label rows\n  const firstCell = String(vals[0] || '').trim();\n  if (!firstCell) continue;\n  if (SKIP.has(firstCell)) continue;\n  if (firstCell.toLowerCase().startsWith('total')) continue;\n\n  // Parse date\n  let dateObj = parseDate(vals[0]);\n  if (!dateObj || isNaN(dateObj.getTime())) continue;\n  dateObj = normalizeDate(dateObj);\n\n  // Determine product\n  let product;\n  if (source === 'veti') {\n    product = 'VET-I';\n  } else if (source === 'boai') {\n    product = 'BOA-I';\n  } else {\n    product = String(vals[1] || '').trim().toUpperCase();\n    if (!PANEL_PRODUCTS.has(product)) continue;\n  }\n\n  // Column mapping:\n  // Panels:  0=Date, 1=Product, 2=Reg, 3=ICP Reg, 4=Non-ICP, 5=Att, 6=ICP Att, 7=Non-ICP Att, 8=Direct, 9=Partner\n  // VET-I/BOA-I: 0=Date, (no product col), 1=Reg, 2=ICP Reg, 3=Non-ICP, 4=Att, 5=ICP Att, 6=Non-ICP Att, 7=Direct, 8=Partner\n  const offset = (source === 'panels') ? 0 : -1;\n\n  events.push({\n    date:  toDateStr(dateObj),\n    product,\n    reg:   toInt(vals[2 + offset]),\n    icpR:  toInt(vals[3 + offset]),\n    nicpR: toInt(vals[4 + offset]),\n    att:   toInt(vals[5 + offset]),\n    icpA:  toInt(vals[6 + offset]),\n    nicpA: toInt(vals[7 + offset]),\n    dR:    toInt(vals[8 + offset]),\n    pR:    toInt(vals[9 + offset]),\n    q:     assignQuarter(dateObj),\n  });\n}\n\n// Sort by date ascending\nevents.sort((a, b) => new Date(a.date) - new Date(b.date));\n\nconsole.log(`✅ Parsed ${events.length} events`);\n\nreturn [{\n  json: {\n    updatedAt: new Date().toISOString(),\n    count: events.length,\n    events,\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Transform Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.github.com/gists/{{$vars.GIST_ID}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/vnd.github+json" },
+            { "name": "X-GitHub-Api-Version", "value": "2022-11-28" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"files\": {\n    \"dashboard-data.json\": {\n      \"content\": {{ JSON.stringify($json) }}\n    }\n  }\n}",
+        "options": {
+          "response": { "response": { "fullResponse": false } }
+        }
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Push to Gist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1160, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "YOUR_GITHUB_CREDENTIAL_ID",
+          "name": "GitHub Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst rawUrl = res?.files?.['dashboard-data.json']?.raw_url;\nconsole.log('✅ Gist push successful');\nconsole.log('Raw URL:', rawUrl);\nconsole.log('Updated:', res?.updated_at);\nreturn [{ json: { success: true, rawUrl, updatedAt: res?.updated_at } }];"
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "name": "Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [[
+        { "node": "Panels Sheet", "type": "main", "index": 0 },
+        { "node": "VET-I Sheet",  "type": "main", "index": 0 },
+        { "node": "BOA-I Sheet",  "type": "main", "index": 0 }
+      ]]
+    },
+    "Panels Sheet": {
+      "main": [[{ "node": "Tag Sources", "type": "main", "index": 0 }]]
+    },
+    "VET-I Sheet": {
+      "main": [[{ "node": "Tag Sources", "type": "main", "index": 1 }]]
+    },
+    "BOA-I Sheet": {
+      "main": [[{ "node": "Tag Sources", "type": "main", "index": 2 }]]
+    },
+    "Tag Sources": {
+      "main": [[{ "node": "Transform Data", "type": "main", "index": 0 }]]
+    },
+    "Transform Data": {
+      "main": [[{ "node": "Push to Gist", "type": "main", "index": 0 }]]
+    },
+    "Push to Gist": {
+      "main": [[{ "node": "Done", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "pinData": {}
+}
