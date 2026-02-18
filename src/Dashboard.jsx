@@ -8,7 +8,23 @@ import {
 //  DATA SOURCE — update GIST_URL after running n8n for the first time
 //  Format: https://gist.githubusercontent.com/YOUR_USER/GIST_ID/raw/dashboard-data.json
 // ─────────────────────────────────────────────────────────────────
-const GIST_URL = import.meta.env.VITE_GIST_URL || "";
+// Convert gist.github.com → gist.githubusercontent.com automatically
+function normalizeGistUrl(url) {
+  if (!url) return "";
+
+  // If user pasted normal gist page URL → convert to raw
+  if (url.includes("gist.github.com")) {
+    const match = url.match(/gist\.github\.com\/([^/]+)\/([a-zA-Z0-9]+)/);
+    if (match) {
+      return `https://gist.githubusercontent.com/${match[1]}/${match[2]}/raw`;
+    }
+  }
+
+  return url;
+}
+
+const GIST_URL = normalizeGistUrl(import.meta.env.VITE_GIST_URL || "");
+
 
 const GOALS    = { TD: 340, BOA: 340, VET: 100, LAW: 100, "VET-I": 225, "BOA-I": 435 };
 const PRODUCTS = ["All", "TD", "BOA", "VET", "LAW", "VET-I", "BOA-I"];
@@ -149,30 +165,58 @@ export default function Dashboard() {
   const [error, setError]     = useState("");
   const mounted = useRef(true);
 
-  const fetchData = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      // Cache-bust so we always get the latest Gist content
-      const url = `${GIST_URL}?t=${Date.now()}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status} — check GIST_URL is correct`);
-      const json = await res.json();
-      if (!Array.isArray(json.events)) throw new Error("Unexpected data format from Gist");
-      if (mounted.current) {
-        setEvents(json.events);
-        setStatus("live");
-        setUpdatedAt(json.updatedAt ? new Date(json.updatedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : new Date().toLocaleTimeString());
-        setError("");
-      }
-    } catch (e) {
-      if (mounted.current) {
-        setStatus(prev => prev === "live" ? "stale" : "error");
-        setError(e.message);
-      }
-    } finally {
-      if (mounted.current) setRefreshing(false);
+const fetchData = useCallback(async () => {
+  if (!GIST_URL) return;
+
+  setRefreshing(true);
+
+  try {
+    // cache busting
+    const url = `${GIST_URL}${GIST_URL.includes("?") ? "&" : "?"}t=${Date.now()}`;
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} — check GIST_URL`);
     }
-  }, []);
+
+    const json = await res.json();
+
+    if (!Array.isArray(json.events)) {
+      throw new Error("Invalid Gist format — expected { events: [] }");
+    }
+
+    if (mounted.current) {
+      setEvents(json.events);
+      setStatus("live");
+      setUpdatedAt(
+        json.updatedAt
+          ? new Date(json.updatedAt).toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : new Date().toLocaleTimeString()
+      );
+      setError("");
+    }
+  } catch (e) {
+    console.error("Fetch error:", e);
+
+    if (mounted.current) {
+      setStatus(prev => (prev === "live" ? "stale" : "error"));
+      setError(e.message);
+    }
+  } finally {
+    if (mounted.current) setRefreshing(false);
+  }
+}, []);
+
 
   useEffect(() => {
     mounted.current = true;
